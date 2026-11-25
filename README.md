@@ -1,59 +1,68 @@
-# QMK Userspace
+# My QMK Userspace – Keychron Q6 (original, ANSI, no knob)
 
-This is a template repository which allows for an external set of QMK keymaps to be defined and compiled. This is useful for users who want to maintain their own keymaps without having to fork the [main QMK repository](https://github.com/qmk/qmk_firmware). You must still fork the main QMK repository if writing firmware for a *new* keyboard.
+## What this does
+Custom firmware for the original Keychron Q6 ANSI (not Pro/Max/HE):
+- **Num Lock indicator is inverted**: lit only when Num Lock is OFF.
+- **Caps Lock indicator** unchanged: lit when Caps Lock is ON.
+- **Backlight off = indicators only**: with the backlight off, the board is dark except
+  for the lock indicators. With the backlight on, effects work normally and the
+  indicators draw on top.
+- **VIA enabled**, so Keychron Launcher still works for remapping and lighting.
 
-## Howto configure your build targets
+## Files
+`keyboards/keychron/q6/ansi/keymaps/custom/`
+- `keymap.c`
+  - Default layers (Launcher overrides these after flashing).
+  - `#error` guard: build fails if either lock LED index is undefined.
+  - `process_record_user()`: RGB toggle (`RM_TOGG`/`UG_TOGG`) switches RGB Matrix
+    flags between `LED_FLAG_ALL` (backlight on) and `LED_FLAG_NONE` (indicators only)
+    instead of disabling RGB Matrix.
+  - `housekeeping_task_user()`: if anything (e.g. Launcher) disables RGB Matrix,
+    converts that to `LED_FLAG_NONE` and re-enables it.
+  - `rgb_matrix_indicators_advanced_user()`: blanks all LEDs when flags are NONE, then
+    draws the lock indicators. Returns `false` to skip the stock code in `q6.c`.
+- `config.h` – defines `NUM_LOCK_LED_INDEX 37` (official QMK ships it commented out
+  for the Q6 ANSI; `CAPS_LOCK_LED_INDEX 61` comes from the keyboard's own config).
+- `rules.mk` – `VIA_ENABLE = yes`.
 
-1. Run the normal `qmk setup` procedure if you haven't already done so -- see [QMK Docs](https://docs.qmk.fm/#/newbs) for details.
-1. Fork this repository
-1. Clone your fork to your local machine
-1. Enable userspace in QMK config using `qmk config user.overlay_dir="$(realpath qmk_userspace)"`
-1. Add a new keymap for your board using `qmk new-keymap`
-    * This will create a new keymap in the `keyboards` directory, in the same location that would normally be used in the main QMK repository. For example, if you wanted to add a keymap for the Planck, it will be created in `keyboards/planck/keymaps/<your keymap name>`
-    * You can also create a new keymap using `qmk new-keymap -kb <your_keyboard> -km <your_keymap>`
-    * Alternatively, add your keymap manually by placing it in the location specified above.
-    * `layouts/<layout name>/<your keymap name>/keymap.*` is also supported if you prefer the layout system
-1. Add your keymap(s) to the build by running `qmk userspace-add -kb <your_keyboard> -km <your_keymap>`
-    * This will automatically update your `qmk.json` file
-    * Corresponding `qmk userspace-remove -kb <your_keyboard> -km <your_keymap>` will delete it
-    * Listing the build targets can be done with `qmk userspace-list`
-1. Commit your changes
+`qmk.json` lists the build target: `keychron/q6/ansi` + keymap `custom`.
 
-## Howto build with GitHub
+## Why it works this way
+In official QMK, disabling RGB Matrix skips the indicator hooks entirely, so "backlight
+off" would also hide the lock indicators. Keeping RGB Matrix enabled and using
+`LED_FLAG_NONE` as "off" (the same approach Keychron's firmware uses) keeps the
+indicators visible.
 
-1. In the GitHub Actions tab, enable workflows
-1. Push your changes above to your forked GitHub repository
-1. Look at the GitHub Actions for a new actions run
-1. Wait for the actions run to complete
-1. Inspect the Releases tab on your repository for the latest firmware build
+## Usage notes
+- Toggle backlight: Fn+Tab in the default layers. When remapping in Launcher, keep an
+  "RGB Toggle" key on the Fn layer.
+- Launcher's lighting on/off control: turning **off** works (becomes indicators only).
+  To turn the backlight back **on**, use the RGB toggle key; Launcher may show "on"
+  while the board is in indicators-only mode.
+- The backlight state is saved and survives unplugging.
 
-## Howto build locally
+## How to change things
+In `keymap.c`, `rgb_matrix_indicators_advanced_user()`:
+- Indicator color/brightness: change the `255, 255, 255` (R, G, B) values.
+- Num Lock logic: `!led_state.num_lock` = lit when OFF. Remove the `!` for stock behavior.
 
-1. Run the normal `qmk setup` procedure if you haven't already done so -- see [QMK Docs](https://docs.qmk.fm/#/newbs) for details.
-1. Fork this repository
-1. Clone your fork to your local machine
-1. `cd` into this repository's clone directory
-1. Set global userspace path: `qmk config user.overlay_dir="$(realpath .)"` -- you MUST be located in the cloned userspace location for this to work correctly
-    * This will be automatically detected if you've `cd`ed into your userspace repository, but the above makes your userspace available regardless of your shell location.
-1. Compile normally: `qmk compile -kb your_keyboard -km your_keymap` or `make your_keyboard:your_keymap`
+## How to build (GitHub Codespaces + desktop VS Code)
+1. GitHub → this repo → Code → Codespaces → create/open a codespace.
+2. VS Code → "Codespaces: Connect to Codespace".
+3. Terminal: `qmk compile -kb keychron/q6/ansi -km custom`
+4. If the .bin isn't in the repo folder:
+   `cp /workspaces/qmk_firmware/keychron_q6_ansi_custom.bin .`
+5. Explorer → right-click the .bin → Download.
+6. Stop the codespace when done ("Codespaces: Stop Current Codespace").
 
-Alternatively, if you configured your build targets above, you can use `qmk userspace-compile` to build all of your userspace targets at once.
+## How to flash
+1. QMK Toolbox → select the .bin.
+2. Unplug keyboard, remove spacebar keycap, hold the reset button, plug in.
+3. Flash. Afterwards, reapply the keymap in Keychron Launcher if it was reset.
 
-## Extra info
+## Releases
+Each release has the built .bin attached; its tag marks the exact source used.
+- v1.0 – Inverted Num Lock indicator; backlight-off keeps indicators visible.
 
-If you wish to point GitHub actions to a different repository, a different branch, or even a different keymap name, you can modify `.github/workflows/build_binaries.yml` to suit your needs.
-
-To override the `build` job, you can change the following parameters to use a different QMK repository or branch:
-```
-    with:
-      qmk_repo: qmk/qmk_firmware
-      qmk_ref: master
-```
-
-If you wish to manually manage `qmk_firmware` using git within the userspace repository, you can add `qmk_firmware` as a submodule in the userspace directory instead. GitHub Actions will automatically use the submodule at the pinned revision if it exists, otherwise it will use the default latest revision of `qmk_firmware` from the main repository.
-
-This can also be used to control which fork is used, though only upstream `qmk_firmware` will have support for external userspace until other manufacturers update their forks.
-
-1. (First time only) `git submodule add https://github.com/qmk/qmk_firmware.git`
-1. (To update) `git submodule update --init --recursive`
-1. Commit your changes to your userspace repository
+## Base
+Built against official QMK firmware (qmk/qmk_firmware master), not Keychron's fork.
